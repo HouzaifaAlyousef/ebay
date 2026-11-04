@@ -18,8 +18,34 @@ SEL_PRICE = ".aditem-main--middle--price-shipping--price"
 SEL_LOCATION = ".aditem-main--top--left"
 SEL_DESC = "#viewad-description-text"
 SEL_ATTR_LIST = ".addetailslist--detail"   # Eckdaten (Zimmer, m², etc.)
+SEL_CONSENT = ["#gdpr-banner-accept", "button[aria-label*='akzeptier' i]"]
 
 BASE = "https://www.kleinanzeigen.de"
+
+
+def _accept_consent(page) -> bool:
+    """Cookie-/GDPR-Banner wegklicken (blockiert sonst die Inhalte)."""
+    for sel in SEL_CONSENT:
+        try:
+            el = page.query_selector(sel)
+            if el:
+                el.click()
+                page.wait_for_timeout(1000)
+                return True
+        except Exception:
+            pass
+    return False
+
+
+def _dump_debug(page, name: str = "debug_search"):
+    """Screenshot + HTML speichern, wenn nichts gefunden wird (zur Diagnose)."""
+    from pathlib import Path
+    try:
+        page.screenshot(path=f"{name}.png", full_page=True)
+        Path(f"{name}.html").write_text(page.content(), encoding="utf-8")
+        print(f"    [debug] Seite gespeichert: {name}.png  /  {name}.html")
+    except Exception as e:  # noqa: BLE001
+        print(f"    [debug] Dump fehlgeschlagen: {e}")
 
 
 @contextmanager
@@ -73,9 +99,21 @@ def fetch_search_listings(ctx, url: str, max_pages: int = 1) -> list[dict]:
     for page_no in range(1, max_pages + 1):
         page_url = url if page_no == 1 else _paginate(url, page_no)
         page.goto(page_url, wait_until="domcontentloaded", timeout=60_000)
-        page.wait_for_timeout(2000)
+        _accept_consent(page)
+        try:
+            page.wait_for_selector(SEL_ITEM, timeout=8000)
+        except Exception:
+            pass
+        page.mouse.wheel(0, 3000)        # Lazy-Load anstoßen
+        page.wait_for_timeout(1500)
 
         items = page.query_selector_all(SEL_ITEM)
+        if not items:                    # Fallback-Selektor
+            items = page.query_selector_all("[data-adid]")
+        if not items:
+            _dump_debug(page, "debug_search")
+            print("    [!] 0 Treffer auf dieser Seite – siehe debug_search.png")
+
         for it in items:
             ad_id = it.get_attribute("data-adid")
             link = it.query_selector(SEL_LINK)
