@@ -18,23 +18,46 @@ SEL_PRICE = ".aditem-main--middle--price-shipping--price"
 SEL_LOCATION = ".aditem-main--top--left"
 SEL_DESC = "#viewad-description-text"
 SEL_ATTR_LIST = ".addetailslist--detail"   # Eckdaten (Zimmer, m², etc.)
+SEL_ITEMS = ["article.aditem", "article[data-adid]", "li.ad-listitem article", "[data-adid]"]
+CONSENT_LABELS = ["Alle akzeptieren", "Alle akzeptieren und weiter", "Akzeptieren"]
 SEL_CONSENT = ["#gdpr-banner-accept", "button[aria-label*='akzeptier' i]"]
 
 BASE = "https://www.kleinanzeigen.de"
 
 
 def _accept_consent(page) -> bool:
-    """Cookie-/GDPR-Banner wegklicken (blockiert sonst die Inhalte)."""
-    for sel in SEL_CONSENT:
-        try:
-            el = page.query_selector(sel)
-            if el:
-                el.click()
-                page.wait_for_timeout(1000)
-                return True
-        except Exception:
-            pass
+    """Consent-Dialog 'Willkommen bei Kleinanzeigen' / Cookie-Banner wegklicken.
+    Sucht per Button-Text (robust) über alle Frames; CSS-IDs als Fallback.
+    """
+    for fr in [page, *page.frames]:
+        for label in CONSENT_LABELS:
+            try:
+                btn = fr.get_by_role("button", name=label, exact=False)
+                if btn.count() > 0:
+                    btn.first.click(timeout=3000)
+                    page.wait_for_timeout(1500)
+                    return True
+            except Exception:
+                pass
+        for sel in SEL_CONSENT:
+            try:
+                el = fr.query_selector(sel)
+                if el:
+                    el.click()
+                    page.wait_for_timeout(1500)
+                    return True
+            except Exception:
+                pass
     return False
+
+
+def _find_items(page):
+    """Erstes Selektor-Schema, das Treffer liefert (Layout ändert sich)."""
+    for sel in SEL_ITEMS:
+        els = page.query_selector_all(sel)
+        if els:
+            return els
+    return []
 
 
 def _dump_debug(page, name: str = "debug_search"):
@@ -99,23 +122,25 @@ def fetch_search_listings(ctx, url: str, max_pages: int = 1) -> list[dict]:
     for page_no in range(1, max_pages + 1):
         page_url = url if page_no == 1 else _paginate(url, page_no)
         page.goto(page_url, wait_until="domcontentloaded", timeout=60_000)
-        _accept_consent(page)
+        page.wait_for_timeout(1500)
+        _accept_consent(page)            # Consent-Dialog wegklicken
         try:
-            page.wait_for_selector(SEL_ITEM, timeout=8000)
+            page.wait_for_selector(SEL_ITEM, timeout=10_000)
         except Exception:
             pass
-        page.mouse.wheel(0, 3000)        # Lazy-Load anstoßen
+        page.mouse.wheel(0, 4000)        # Lazy-Load anstoßen
         page.wait_for_timeout(1500)
 
-        items = page.query_selector_all(SEL_ITEM)
-        if not items:                    # Fallback-Selektor
-            items = page.query_selector_all("[data-adid]")
+        items = _find_items(page)
         if not items:
             _dump_debug(page, "debug_search")
             print("    [!] 0 Treffer auf dieser Seite – siehe debug_search.png")
 
         for it in items:
             ad_id = it.get_attribute("data-adid")
+            if not ad_id:                # bei Fallback-Selektor data-adid tiefer suchen
+                inner = it.query_selector("[data-adid]")
+                ad_id = inner.get_attribute("data-adid") if inner else None
             link = it.query_selector(SEL_LINK)
             if not ad_id or not link or ad_id in seen_ids:
                 continue
