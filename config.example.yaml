@@ -50,6 +50,7 @@ llm:
 
 # --- Laufzeit / Anti-Bot-Schonung ---
 runtime:
-  delay_between_actions_sec: [20, 60]   # zufällige Pause (min, max) zwischen Aktionen
+  delay_between_actions_sec: [30, 90]   # zufällige Pause (min, max) zwischen Aktionen – lieber großzügig!
   headless: false                       # false empfohlen (sichtbarer Browser = weniger Bot-Verdacht)
   user_data_dir: "./.pw-profile"        # persistenter Browser-Login (einmal einloggen)
+  browser_channel: "chrome"             # dein echtes Chrome nutzen (unauffälliger). Leer = gebündeltes Chromium.

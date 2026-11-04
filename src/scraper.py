@@ -23,17 +23,32 @@ BASE = "https://www.kleinanzeigen.de"
 
 
 @contextmanager
-def browser_context(user_data_dir: str, headless: bool = False):
+def browser_context(user_data_dir: str, headless: bool = False,
+                    channel: str | None = None, user_agent: str | None = None):
+    """Persistenter Browser-Kontext mit reduziertem Automatisierungs-Fingerabdruck.
+
+    channel="chrome" nutzt dein installiertes echtes Chrome statt des gebündelten
+    Chromium -> deutlich unauffälliger. user_agent nur setzen, wenn nötig
+    (sonst nutzt der Browser seinen echten, zur Plattform passenden UA).
+    """
     with sync_playwright() as p:
-        ctx = p.chromium.launch_persistent_context(
+        launch_kwargs = dict(
             user_data_dir=user_data_dir,
             headless=headless,
             locale="de-DE",
-            viewport={"width": 1280, "height": 900},
-            user_agent=(
-                "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
-                "(KHTML, like Gecko) Chrome/124.0 Safari/537.36"
-            ),
+            timezone_id="Europe/Berlin",
+            viewport={"width": 1366, "height": 900},
+            args=["--disable-blink-features=AutomationControlled"],
+            ignore_default_args=["--enable-automation"],
+        )
+        if channel:
+            launch_kwargs["channel"] = channel      # z.B. "chrome" | "msedge"
+        if user_agent:
+            launch_kwargs["user_agent"] = user_agent
+        ctx = p.chromium.launch_persistent_context(**launch_kwargs)
+        # navigator.webdriver verstecken (häufigstes Bot-Signal)
+        ctx.add_init_script(
+            "Object.defineProperty(navigator, 'webdriver', {get: () => undefined});"
         )
         try:
             yield ctx
@@ -140,9 +155,9 @@ def _paginate(url: str, page_no: int) -> str:
     return url
 
 
-def interactive_login(user_data_dir: str):
+def interactive_login(user_data_dir: str, channel: str | None = None):
     """Einmalig manuell einloggen; Session wird im user_data_dir gespeichert."""
-    with browser_context(user_data_dir, headless=False) as ctx:
+    with browser_context(user_data_dir, headless=False, channel=channel) as ctx:
         page = ctx.new_page()
         page.goto(BASE + "/m-einloggen.html", wait_until="domcontentloaded")
         print(">> Bitte im Browser einloggen (ggf. Captcha lösen).")

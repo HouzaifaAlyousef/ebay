@@ -23,7 +23,9 @@ def _sleep(cfg):
 
 def cmd_run(cfg):
     db = DB()
-    with scraper.browser_context(cfg.runtime.user_data_dir, cfg.runtime.headless) as ctx:
+    channel = getattr(cfg.runtime, "browser_channel", None) or None
+    with scraper.browser_context(cfg.runtime.user_data_dir, cfg.runtime.headless,
+                                 channel=channel) as ctx:
         print(f"[*] Suche: {cfg.search.url}")
         listings = scraper.fetch_search_listings(ctx, cfg.search.url, cfg.search.max_pages)
         print(f"[*] {len(listings)} Anzeigen gefunden.")
@@ -94,7 +96,8 @@ def _row(base, status, score=None, reasons="", message=""):
 
 
 def cmd_login(cfg):
-    scraper.interactive_login(cfg.runtime.user_data_dir)
+    channel = getattr(cfg.runtime, "browser_channel", None) or None
+    scraper.interactive_login(cfg.runtime.user_data_dir, channel=channel)
     print("[*] Login-Session gespeichert.")
 
 
