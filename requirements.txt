@@ -1,0 +1,7 @@
+playwright>=1.44
+PyYAML>=6.0
+python-dotenv>=1.0
+# LLM-Backends (installiere nur das, was du nutzt):
+openai>=1.40          # provider: openai
+google-genai>=0.3     # provider: gemini
+anthropic>=0.34       # provider: anthropic

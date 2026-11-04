@@ -1,0 +1,55 @@
+# ============================================================
+#  Kleinanzeigen Wohnungs-Helfer  –  Konfiguration
+#  Kopiere diese Datei zu "config.yaml" und passe alles an.
+# ============================================================
+
+search:
+  # Die fertige Such-URL von Kleinanzeigen MIT deinen Filtern.
+  # Tipp: Auf kleinanzeigen.de alle Filter (Ort, Preis, Zimmer) setzen,
+  #       dann die URL aus der Adresszeile hierher kopieren.
+  url: "https://www.kleinanzeigen.de/s-wohnung-mieten/berlin/c203l3331"
+  max_pages: 2            # Wie viele Ergebnisseiten durchsuchen
+
+# --- Harte Filter (werden im Code VOR dem LLM geprüft, spart Tokens) ---
+criteria:
+  min_price: 0
+  max_price: 1200         # in EUR (Kaltmiete – je nach deiner Suche)
+  min_rooms: 2
+  max_rooms: 4
+  min_size_sqm: 50
+  required_keywords: []           # z.B. ["Balkon"]  – muss im Text vorkommen
+  excluded_keywords: ["WBS", "Tausch", "möbliert", "Zwischenmiete"]
+  # Freitext-Hinweise NUR für das LLM (weiche Kriterien):
+  notes: >
+    Ich suche eine ruhige, helle Wohnung in Dauermiete.
+    Haustier (eine Katze) sollte erlaubt sein. Einzug ab sofort oder flexibel.
+
+# --- Dein Profil: Grundlage für das Anschreiben ---
+profile:
+  name: "Max Mustermann"
+  household: "2 Erwachsene, keine Kinder"
+  job: "Softwareentwickler, unbefristet angestellt"
+  income_net_monthly: 3500
+  schufa: "einwandfrei, Auskunft vorhanden"
+  smoker: false
+  pets: "eine ruhige Hauskatze"
+  move_in: "ab sofort / flexibel"
+  extra: "Zuverlässig, Nichtraucher. SCHUFA, Gehaltsnachweise und Mietschuldenfreiheitsbescheinigung liegen bereit."
+
+# --- Nachricht / Verhalten ---
+message:
+  language: "de"
+  tone: "freundlich, höflich, kurz und konkret"
+  mode: "semi-auto"       # semi-auto = nur vorbereiten | auto = automatisch senden (RISIKO!)
+  min_score: 7            # LLM-Bewertung 0-10, ab der eine Nachricht erstellt/gesendet wird
+
+# --- LLM-Anbindung ---
+llm:
+  provider: "gemini"      # gemini | openai | anthropic
+  model: "gemini-2.0-flash"   # z.B. gemini-2.0-flash | gpt-4o-mini | claude-3-5-haiku-latest
+
+# --- Laufzeit / Anti-Bot-Schonung ---
+runtime:
+  delay_between_actions_sec: [20, 60]   # zufällige Pause (min, max) zwischen Aktionen
+  headless: false                       # false empfohlen (sichtbarer Browser = weniger Bot-Verdacht)
+  user_data_dir: "./.pw-profile"        # persistenter Browser-Login (einmal einloggen)
