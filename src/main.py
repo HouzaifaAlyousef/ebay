@@ -37,43 +37,52 @@ def cmd_run(cfg):
             new_count += 1
             print(f"\n[+] Neu: {base['title']}  ({base['price']})")
 
-            # Detailseite laden
-            detail = scraper.fetch_listing_detail(ctx, base["url"])
-            listing = {**base, **detail}
-            _sleep(cfg)
-
-            # 1) Harter Filter
-            ok, reason = evaluator.hard_filter(listing, cfg.criteria)
-            if not ok:
-                print(f"    -> aussortiert: {reason}")
-                db.save(**_row(base, "filtered_out", reasons=reason))
-                continue
-
-            # 2) LLM-Bewertung + Nachricht
+            # Ein fehlerhaftes Inserat darf den ganzen Lauf nicht stoppen
             try:
-                res = evaluator.evaluate_and_compose(
-                    listing, cfg.profile, cfg.criteria, cfg.message, cfg.llm
-                )
-            except Exception as e:  # noqa: BLE001
-                print(f"    -> LLM-Fehler: {e}")
-                db.save(**_row(base, "error", reasons=str(e)))
-                continue
+                # Detailseite laden
+                detail = scraper.fetch_listing_detail(ctx, base["url"])
+                listing = {**base, **detail}
+                _sleep(cfg)
 
-            print(f"    -> Score {res['score']}: {res['reasons']}")
+                # 1) Harter Filter
+                ok, reason = evaluator.hard_filter(listing, cfg.criteria)
+                if not ok:
+                    print(f"    -> aussortiert: {reason}")
+                    db.save(**_row(base, "filtered_out", reasons=reason))
+                    continue
 
-            if res["match"] and res["score"] >= cfg.message.min_score:
-                if cfg.message.mode == "auto":
-                    sent = messenger.send_message_auto(
-                        ctx, base["url"], res["message"], submit=True
+                # 2) LLM-Bewertung + Nachricht
+                try:
+                    res = evaluator.evaluate_and_compose(
+                        listing, cfg.profile, cfg.criteria, cfg.message, cfg.llm
                     )
-                    status = "sent" if sent else "error"
-                    print(f"    -> {'GESENDET' if sent else 'Senden fehlgeschlagen'}")
+                except Exception as e:  # noqa: BLE001
+                    print(f"    -> LLM-Fehler: {e}")
+                    db.save(**_row(base, "error", reasons=str(e)))
+                    continue
+
+                print(f"    -> Score {res['score']}: {res['reasons']}")
+
+                if res["match"] and res["score"] >= cfg.message.min_score:
+                    if cfg.message.mode == "auto":
+                        sent = messenger.send_message_auto(
+                            ctx, base["url"], res["message"], submit=True
+                        )
+                        status = "sent" if sent else "error"
+                        print(f"    -> {'GESENDET' if sent else 'Senden fehlgeschlagen'}")
+                    else:
+                        status = "ready"
+                        print("    -> Nachricht vorbereitet (semi-auto).")
+                    db.save(**_row(base, status, res["score"], res["reasons"], res["message"]))
                 else:
-                    status = "ready"
-                    print("    -> Nachricht vorbereitet (semi-auto).")
-                db.save(**_row(base, status, res["score"], res["reasons"], res["message"]))
-            else:
-                db.save(**_row(base, "rejected", res["score"], res["reasons"]))
+                    db.save(**_row(base, "rejected", res["score"], res["reasons"]))
+
+            except Exception as e:  # noqa: BLE001
+                if "closed" in str(e).lower():
+                    print("    [!] Browser/Seite wurde geschlossen – Lauf wird beendet.")
+                    break
+                print(f"    -> Fehler bei diesem Inserat (übersprungen): {e}")
+                db.save(**_row(base, "error", reasons=str(e)))
 
             _sleep(cfg)
 
