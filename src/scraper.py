@@ -132,21 +132,38 @@ def fetch_search_listings(ctx, url: str, max_pages: int = 1) -> list[dict]:
         page.wait_for_timeout(1500)
 
         items = _find_items(page)
-        if not items:
-            _dump_debug(page, "debug_search")
-            print("    [!] 0 Treffer auf dieser Seite – siehe debug_search.png")
+        parsed_here = 0
 
         for it in items:
             ad_id = it.get_attribute("data-adid")
-            if not ad_id:                # bei Fallback-Selektor data-adid tiefer suchen
+            if not ad_id:
                 inner = it.query_selector("[data-adid]")
                 ad_id = inner.get_attribute("data-adid") if inner else None
-            link = it.query_selector(SEL_LINK)
-            if not ad_id or not link or ad_id in seen_ids:
+
+            # Link/URL robust bestimmen (Layout variiert)
+            href = it.get_attribute("data-href")
+            link = (it.query_selector("a.ellipsis")
+                    or it.query_selector("h2 a")
+                    or it.query_selector("a[href*='/s-anzeige/']")
+                    or it.query_selector("a[href]"))
+            if not href and link:
+                href = link.get_attribute("href")
+            if not href:
                 continue
-            href = link.get_attribute("href") or ""
             full_url = href if href.startswith("http") else BASE + href
-            title = (link.inner_text() or "").strip()
+
+            if not ad_id:                       # ID aus URL ableiten
+                m = re.search(r"/(\d{6,})-", full_url) or re.search(r"(\d{6,})", full_url)
+                ad_id = m.group(1) if m else full_url
+            if ad_id in seen_ids:
+                continue
+
+            # Titel robust
+            title = (link.inner_text().strip() if link else "")
+            if not title:
+                h = it.query_selector("h2")
+                title = (h.inner_text().strip() if h else "")
+
             price_el = it.query_selector(SEL_PRICE)
             loc_el = it.query_selector(SEL_LOCATION)
             results.append({
@@ -157,6 +174,12 @@ def fetch_search_listings(ctx, url: str, max_pages: int = 1) -> list[dict]:
                 "location": (loc_el.inner_text().strip() if loc_el else ""),
             })
             seen_ids.add(ad_id)
+            parsed_here += 1
+
+        if parsed_here == 0:
+            _dump_debug(page, "debug_search")
+            print(f"    [!] Seite {page_no}: 0 verwertbare Anzeigen "
+                  f"({len(items)} Rohelemente gefunden) – siehe debug_search.png / .html")
 
     page.close()
     return results
